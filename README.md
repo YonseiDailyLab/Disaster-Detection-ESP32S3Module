@@ -2,7 +2,13 @@
 
 ## Introduction
 
-This project focuses on detecting anomalies in disaster environments using **ESP32S3 Feather with 2MB PSRAM**. The ESP32 sends weights and biases to a **Jetson Platform** to facilitate **federated learning**, where the model updates are processed on the Jetson side. This repository only contains the **ESP32** code that handles sensor data collection, model weight updates, and communication with the Jetson.
+>This project focuses on anomaly detection in disaster environments using an **ESP32S3 Feather with 2MB PSRAM**.
+>
+>The **ESP32** sends weights and biases to a **Jetson** to facilitate **federated learning** where model updates are processed on the Jetson side.
+> 
+>This repository contains only the **ESP32** code that handles sensor data collection, model weight updates, and communication with the Jetson.
+
+***
 
 ## Getting Started
 
@@ -33,6 +39,7 @@ This project focuses on detecting anomalies in disaster environments using **ESP
     ```bash
     platformio run --target upload
     ```
+***
 
 ## Folder Structure
 
