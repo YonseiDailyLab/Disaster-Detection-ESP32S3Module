@@ -19,8 +19,8 @@ This repository contains only the **ESP32** code that handles sensor data collec
 
 1. Clone the repository:
    ```bash
-   git clone <repository-url>
-   cd <repository-directory>
+   git clone https://github.com/YonseiDailyLab/Disaster-Detection-ESP32S3Module.git
+   cd Disaster-Detection-ESP32S3Module
     ```
    
 2. Install the necessary libraries:
