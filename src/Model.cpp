@@ -73,14 +73,12 @@ void AutoEncoder::init() {
     uint32_t decoder_param_memory_size = aialgo_sizeof_parameter_memory(&decoder_model);
     uint32_t total_param_memory_size = encoder_param_memory_size + decoder_param_memory_size;
 
-    Serial.print(F("Required memory for parameters: "));
-    Serial.print(total_param_memory_size);
-    Serial.println(F(" bytes"));
+    log_w("Required memory for parameters: %d bytes \n", total_param_memory_size);
 
     parameter_memory = (byte*)ps_malloc(total_param_memory_size);
     if (!parameter_memory) {
-        Serial.println(F("Failed to allocate memory for parameters."));
-        while(1);
+        log_e("Failed to allocate memory for parameters.");
+        ESP.restart();
     }
 
     // Distribute parameter memory
@@ -112,14 +110,12 @@ void AutoEncoder::init() {
     uint32_t decoder_training_memory_size = aialgo_sizeof_training_memory(&decoder_model, optimizer);
     uint32_t total_training_memory_size = encoder_training_memory_size + decoder_training_memory_size;
 
-    Serial.print(F("Required memory for training: "));
-    Serial.print(total_training_memory_size);
-    Serial.println(F(" bytes"));
+    log_w("Required memory for training: %d bytes \n", total_training_memory_size);
 
     training_memory = (byte*)ps_malloc(total_training_memory_size);
     if (!training_memory) {
-        Serial.println(F("Failed to allocate memory for training."));
-        while(1);
+        log_e("Failed to allocate memory for training.");
+        ESP.restart();
     }
 
     // Schedule training memory
@@ -130,7 +126,7 @@ void AutoEncoder::init() {
     aialgo_init_model_for_training(&encoder_model, optimizer);
     aialgo_init_model_for_training(&decoder_model, optimizer);
 
-    Serial.println(F("AutoEncoder initialized."));
+    log_d("AutoEncoder initialized.");
 }
 
 void AutoEncoder::train(float* input_data, float* target_data, uint32_t total_data_size) {
@@ -153,7 +149,7 @@ void AutoEncoder::train(float* input_data, float* target_data, uint32_t total_da
     uint16_t print_interval = 10;
     float loss;
 
-    Serial.println(F("Start training"));
+    log_d("Start training");
 
     for (uint16_t epoch = 0; epoch < epochs; epoch++) {
         for (uint32_t batch = 0; batch < num_batches; batch++) {
@@ -171,24 +167,20 @@ void AutoEncoder::train(float* input_data, float* target_data, uint32_t total_da
             aialgo_train_model(&encoder_model, &input_tensor, &embedding_tensor, optimizer, batch_size);
         }
 
-        // Print loss
         if (epoch % print_interval == 0) {
             // Compute loss
             aialgo_inference_model(&encoder_model, &input_tensor, &embedding_tensor);
             aialgo_inference_model(&decoder_model, &embedding_tensor, &output_tensor);
             aialgo_calc_loss_model_f32(&decoder_model, &embedding_tensor, &target_tensor, &loss);
 
-            Serial.print(F("Epoch: "));
-            Serial.print(epoch);
-            Serial.print(F(" Loss: "));
-            Serial.println(loss);
+            log_i("Epoch: %d Loss: %f", epoch, loss);
         }
     }
 
     free(embedding_data);
     free(output_data);
 
-    Serial.println(F("Training completed."));
+    log_d("Training completed.");
 }
 
 void AutoEncoder::infer(float* input_data, float* output_data, uint32_t total_data_size) {
@@ -270,14 +262,83 @@ void AutoEncoder::setBiases(const float* biases[]) {
 
 void AutoEncoder::handleTrainingError(int8_t error) {
     if (error == 0) return;
-    Serial.print(F("Training Error: "));
-    Serial.println(error);
+    log_e("Training Error: %d", error);
+    switch(error){
+        case 0:
+            //Serial.println(F("No Error :)"));
+            break;
+        case -1:
+            log_e("ERROR! Tensor dtype");
+            break;
+        case -2:
+            log_e("ERROR! Tensor shape: Data Number");
+            break;
+        case -3:
+            log_e("ERROR! Input tensor shape does not correspond to ANN inputs");
+            break;
+        case -4:
+            log_e("ERROR! Output tensor shape does not correspond to ANN outputs");
+            break;
+        case -5:
+            log_e("ERROR! Use the crossentropy as loss for softmax");
+            break;
+        case -6:
+            log_e("ERROR! learn_rate or sgd_momentum negative");
+            break;
+        case -7:
+            log_e("ERROR! Init uniform weights min - max wrong");
+            break;
+        case -8:
+            log_e("ERROR! batch_size: min = 1 / max = Number of training data");
+            break;
+        case -9:
+            log_e("ERROR! Unknown activation function");
+            break;
+        case -10:
+            log_e("ERROR! Unknown loss function");
+            break;
+        case -11:
+            log_e("ERROR! Unknown init weights method");
+            break;
+        case -12:
+            Serial.println(F("ERROR! Unknown optimizer"));
+            break;
+        case -13:
+            Serial.println(F("ERROR! Not enough memory"));
+            break;
+        default :
+            Serial.println(F("Unknown error"));
+    }
 }
 
 void AutoEncoder::handleInferenceError(int8_t error) {
     if (error == 0) return;
-    Serial.print(F("Inference Error: "));
-    Serial.println(error);
+    log_e("Inference Error: %d", error);
+    switch(error){
+        case 0:
+            //Serial.println(F("No Error :)"));
+            break;
+        case -1:
+            log_e("ERROR! Tensor dtype");
+            break;
+        case -2:
+            log_e("ERROR! Tensor shape: Data Number");
+            break;
+        case -3:
+            log_e("ERROR! Input tensor shape does not correspond to ANN inputs");
+            break;
+        case -4:
+            log_e("ERROR! Output tensor shape does not correspond to ANN outputs");
+            break;
+        case -5:
+            log_e("ERROR! Unknown activation function");
+            break;
+        case -6:
+            log_e("ERROR! Not enough memory");
+            break;
+        default :
+            log_e("ERROR! Unknown error");
+    }
 }
 
 void AutoEncoder::print_aitensor(const aitensor_t* tensor) {
