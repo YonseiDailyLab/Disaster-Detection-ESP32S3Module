@@ -1,146 +1,177 @@
 #include "Model.h"
+#include <Arduino.h>
 
-AutoencoderModel::AutoencoderModel() : optimizer(nullptr), parameter_memory(nullptr), training_memory(nullptr), loss(0.0f), initialized(false) {
-    // 생성자
-}
+AutoEncoder::AutoEncoder(uint16_t input_size, uint16_t embedding_size, uint16_t batch_size)
+        : input_size(input_size), embedding_size(embedding_size), batch_size(batch_size) {}
 
-AutoencoderModel::~AutoencoderModel() {
-    // 소멸자
-    freeMemory();
-}
+void AutoEncoder::initialize() {
+    Serial.println(F("AutoEncoder initializing..."));
 
-void AutoencoderModel::initialize() {
-    if (initialized) return;
+    // Initialize random seed
+    srand(analogRead(A0));
 
-    Serial.println("Initializing AIfES model...");
+    // --- Encoder Model Initialization ---
+    uint16_t encoder_input_shape[] = {1, input_size};
+    encoder_input_layer = AILAYER_INPUT_F32_A(/*input dimension=*/ input_size, /*input shape=*/ encoder_input_shape);
+    encoder_dense_1 = AILAYER_DENSE_F32_A(/*neurons=*/ 128);
+    encoder_tanh_1 = AILAYER_TANH_F32_A();
+    encoder_dense_2 = AILAYER_DENSE_F32_A(/*neurons=*/ 64);
+    encoder_tanh_2 = AILAYER_TANH_F32_A();
+    encoder_dense_3 = AILAYER_DENSE_F32_A(/*neurons=*/ embedding_size); // embedding_size = 32
+    encoder_tanh_3 = AILAYER_TANH_F32_A();
 
-    // 모델 레이어 정의
-    const int input_dim = InputDim;
-    const int encoding_dim1 = 64;
-    const int encoding_dim2 = 32;
+    // Build Encoder Model
+    ailayer_t *x;
+    encoder_model.input_layer = ailayer_input_f32_default(&encoder_input_layer);
+    x = ailayer_dense_f32_default(&encoder_dense_1, encoder_model.input_layer);
+    x = ailayer_tanh_f32_default(&encoder_tanh_1, x);
+    x = ailayer_dense_f32_default(&encoder_dense_2, x);
+    x = ailayer_tanh_f32_default(&encoder_tanh_2, x);
+    x = ailayer_dense_f32_default(&encoder_dense_3, x);
+    x = ailayer_tanh_f32_default(&encoder_tanh_3, x);
+    encoder_model.output_layer = x;
 
-    ailayer_input_f32_t input_layer = AILAYER_INPUT_F32_A(input_dim, (uint16_t[]){input_dim});
-    ailayer_dense_f32_t dense_layer_1 = AILAYER_DENSE_F32_A(encoding_dim1); // 인코더 레이어 1
-    ailayer_sigmoid_f32_t sigmoid_layer_1 = AILAYER_SIGMOID_F32_A();
-    ailayer_dense_f32_t dense_layer_2 = AILAYER_DENSE_F32_A(encoding_dim2); // 인코더 레이어 2 (병목)
-    ailayer_sigmoid_f32_t sigmoid_layer_2 = AILAYER_SIGMOID_F32_A();
-    ailayer_dense_f32_t dense_layer_3 = AILAYER_DENSE_F32_A(encoding_dim1); // 디코더 레이어 1
-    ailayer_sigmoid_f32_t sigmoid_layer_3 = AILAYER_SIGMOID_F32_A();
-    ailayer_dense_f32_t dense_layer_4 = AILAYER_DENSE_F32_A(input_dim); // 디코더 레이어 2 (출력층)
-    ailayer_sigmoid_f32_t sigmoid_layer_4 = AILAYER_SIGMOID_F32_A();
+    // --- Decoder Model Initialization ---
+    uint16_t decoder_input_shape[] = {1, embedding_size};
+    decoder_input_layer = AILAYER_INPUT_F32_A(/*input dimension=*/ embedding_size, /*input shape=*/ decoder_input_shape);
+    decoder_dense_1 = AILAYER_DENSE_F32_A(/*neurons=*/ 64);
+    decoder_tanh_1 = AILAYER_TANH_F32_A();
+    decoder_dense_2 = AILAYER_DENSE_F32_A(/*neurons=*/ 128);
+    decoder_tanh_2 = AILAYER_TANH_F32_A();
+    decoder_dense_3 = AILAYER_DENSE_F32_A(/*neurons=*/ input_size);
+    decoder_tanh_3 = AILAYER_TANH_F32_A();
 
-    ailoss_mse_t mse_loss;
+    // Build Decoder Model
+    decoder_model.input_layer = ailayer_input_f32_default(&decoder_input_layer);
+    x = ailayer_dense_f32_default(&decoder_dense_1, decoder_model.input_layer);
+    x = ailayer_tanh_f32_default(&decoder_tanh_1, x);
+    x = ailayer_dense_f32_default(&decoder_dense_2, x);
+    x = ailayer_tanh_f32_default(&decoder_tanh_2, x);
+    x = ailayer_dense_f32_default(&decoder_dense_3, x);
+    x = ailayer_tanh_f32_default(&decoder_tanh_3, x);
+    decoder_model.output_layer = x;
 
-    // 모델 구조 연결
-    model.input_layer = ailayer_input_f32_default(&input_layer);
-    ailayer_t *x = ailayer_dense_f32_default(&dense_layer_1, model.input_layer);
-    x = ailayer_sigmoid_f32_default(&sigmoid_layer_1, x);
-    x = ailayer_dense_f32_default(&dense_layer_2, x);
-    x = ailayer_sigmoid_f32_default(&sigmoid_layer_2, x);
-    x = ailayer_dense_f32_default(&dense_layer_3, x);
-    x = ailayer_sigmoid_f32_default(&sigmoid_layer_3, x);
-    x = ailayer_dense_f32_default(&dense_layer_4, x);
-    x = ailayer_sigmoid_f32_default(&sigmoid_layer_4, x);
-    model.output_layer = x;
+    // Loss function
+    ailoss_mse_t mse_loss_encoder;
+    encoder_model.loss = ailoss_mse_f32_default(&mse_loss_encoder, encoder_model.output_layer);
 
-    // 손실 함수 설정
-    model.loss = ailoss_mse_f32_default(&mse_loss, model.output_layer);
+    ailoss_mse_t mse_loss_decoder;
+    decoder_model.loss = ailoss_mse_f32_default(&mse_loss_decoder, decoder_model.output_layer);
 
-    // 모델 컴파일
-    aialgo_compile_model(&model);
+    // Compile models
+    aialgo_compile_model(&encoder_model);
+    aialgo_compile_model(&decoder_model);
 
-    // 파라미터 메모리 할당
-    uint32_t parameter_memory_size = aialgo_sizeof_parameter_memory(&model);
-    parameter_memory = (byte *) ps_malloc(parameter_memory_size); // PSRAM 사용
+    // Allocate parameter memory for both models
+    uint32_t encoder_param_memory_size = aialgo_sizeof_parameter_memory(&encoder_model);
+    uint32_t decoder_param_memory_size = aialgo_sizeof_parameter_memory(&decoder_model);
+    uint32_t total_param_memory_size = encoder_param_memory_size + decoder_param_memory_size;
 
-    if(parameter_memory == nullptr){
-        Serial.println(F("ERROR: Not enough memory (RAM) available for parameters!"));
+    Serial.print(F("Required memory for parameters: "));
+    Serial.print(total_param_memory_size);
+    Serial.println(F(" bytes"));
+
+    parameter_memory = (byte*)malloc(total_param_memory_size);
+    if (!parameter_memory) {
+        Serial.println(F("Failed to allocate memory for parameters."));
         while(1);
     }
 
-    // 파라미터 메모리 분배
-    aialgo_distribute_parameter_memory(&model, parameter_memory, parameter_memory_size);
+    // Distribute parameter memory
+    aialgo_distribute_parameter_memory(&encoder_model, parameter_memory, encoder_param_memory_size);
+    aialgo_distribute_parameter_memory(&decoder_model, parameter_memory + encoder_param_memory_size, decoder_param_memory_size);
 
-    // 가중치 초기화 (Glorot 균등 초기화)
-    aimath_f32_default_init_glorot_uniform(&((ailayer_dense_f32_t*)dense_layer_1.base)->weights);
-    aimath_f32_default_init_zeros(&((ailayer_dense_f32_t*)dense_layer_1.base)->bias);
+    // Initialize weights and biases for encoder
+    aimath_f32_default_init_glorot_uniform(&encoder_dense_1.weights);
+    aimath_f32_default_init_zeros(&encoder_dense_1.bias);
+    aimath_f32_default_init_glorot_uniform(&encoder_dense_2.weights);
+    aimath_f32_default_init_zeros(&encoder_dense_2.bias);
+    aimath_f32_default_init_glorot_uniform(&encoder_dense_3.weights);
+    aimath_f32_default_init_zeros(&encoder_dense_3.bias);
 
-    aimath_f32_default_init_glorot_uniform(&((ailayer_dense_f32_t*)dense_layer_2.base)->weights);
-    aimath_f32_default_init_zeros(&((ailayer_dense_f32_t*)dense_layer_2.base)->bias);
+    // Initialize weights and biases for decoder
+    aimath_f32_default_init_glorot_uniform(&decoder_dense_1.weights);
+    aimath_f32_default_init_zeros(&decoder_dense_1.bias);
+    aimath_f32_default_init_glorot_uniform(&decoder_dense_2.weights);
+    aimath_f32_default_init_zeros(&decoder_dense_2.bias);
+    aimath_f32_default_init_glorot_uniform(&decoder_dense_3.weights);
+    aimath_f32_default_init_zeros(&decoder_dense_3.bias);
 
-    aimath_f32_default_init_glorot_uniform(&((ailayer_dense_f32_t*)dense_layer_3.base)->weights);
-    aimath_f32_default_init_zeros(&((ailayer_dense_f32_t*)dense_layer_3.base)->bias);
-
-    aimath_f32_default_init_glorot_uniform(&((ailayer_dense_f32_t*)dense_layer_4.base)->weights);
-    aimath_f32_default_init_zeros(&((ailayer_dense_f32_t*)dense_layer_4.base)->bias);
-
-    // 옵티마이저 설정 (ADAM)
-    aiopti_adam_f32_t adam_opti = AIOPTI_ADAM_F32(0.001f, 0.9f, 0.999f, 1e-7f);
+    // Optimizer
+    adam_opti = AIOPTI_ADAM_F32(/*learning rate=*/ 0.01f, /*beta_1=*/ 0.9f, /*beta_2=*/ 0.999f, /*eps=*/ 1e-7);
     optimizer = aiopti_adam_f32_default(&adam_opti);
 
-    // 훈련 메모리 할당
-    uint32_t memory_size = aialgo_sizeof_training_memory(&model, optimizer);
-    training_memory = (byte *) ps_malloc(memory_size); // PSRAM 사용
+    // Allocate training memory for both models
+    uint32_t encoder_training_memory_size = aialgo_sizeof_training_memory(&encoder_model, optimizer);
+    uint32_t decoder_training_memory_size = aialgo_sizeof_training_memory(&decoder_model, optimizer);
+    uint32_t total_training_memory_size = encoder_training_memory_size + decoder_training_memory_size;
 
-    if(training_memory == nullptr){
-        Serial.println(F("ERROR: Not enough memory (RAM) available for training! Try to use another optimizer (e.g. SGD) or make your net smaller."));
+    Serial.print(F("Required memory for training: "));
+    Serial.print(total_training_memory_size);
+    Serial.println(F(" bytes"));
+
+    training_memory = (byte*)malloc(total_training_memory_size);
+    if (!training_memory) {
+        Serial.println(F("Failed to allocate memory for training."));
         while(1);
     }
 
-    // 훈련 메모리 분배
-    aialgo_schedule_training_memory(&model, optimizer, training_memory, memory_size);
+    // Schedule training memory
+    aialgo_schedule_training_memory(&encoder_model, optimizer, training_memory, encoder_training_memory_size);
+    aialgo_schedule_training_memory(&decoder_model, optimizer, training_memory + encoder_training_memory_size, decoder_training_memory_size);
 
-    // 모델 훈련 초기화
-    aialgo_init_model_for_training(&model, optimizer);
+    // Initialize models for training
+    aialgo_init_model_for_training(&encoder_model, optimizer);
+    aialgo_init_model_for_training(&decoder_model, optimizer);
 
-    initialized = true;
-
-    Serial.println("AIfES model initialized successfully.");
+    Serial.println(F("AutoEncoder initialized."));
 }
 
-void AutoencoderModel::train(float** data, uint32_t data_size) {
-    if (!initialized) initialize();
+void AutoEncoder::train(float* input_data, float* target_data, uint32_t total_data_size) {
+    // total_data_size should be a multiple of batch_size
+    uint32_t num_batches = total_data_size / batch_size;
+    uint16_t input_shape[] = {batch_size, input_size};
+    uint16_t embedding_shape[] = {batch_size, embedding_size};
+    uint16_t output_shape[] = {batch_size, input_size};
 
-    if (data_size < 1) {
-        Serial.println("Not enough data to train.");
-        return;
-    }
+    input_tensor = AITENSOR_2D_F32(input_shape, input_data);
+    target_tensor = AITENSOR_2D_F32(output_shape, target_data);
 
-    Serial.println("Starting training...");
+    float* embedding_data = (float*)malloc(batch_size * embedding_size * sizeof(float));
+    embedding_tensor = AITENSOR_2D_F32(embedding_shape, embedding_data);
 
-    // 입력 및 타겟 데이터 배열 정의 (입력 데이터를 그대로 타겟으로 사용)
-    uint16_t input_shape[] = {data_size, InputDim}; // 입력 데이터
-    uint16_t target_shape[] = {data_size, InputDim}; // 타겟 데이터
+    float* output_data = (float*)malloc(batch_size * input_size * sizeof(float));
+    output_tensor = AITENSOR_2D_F32(output_shape, output_data);
 
-    // PSRAM 사용하여 데이터 배열 할당
-    float (*input_data)[InputDim] = (float (*)[InputDim]) ps_malloc(data_size * InputDim * sizeof(float));
-    float (*target_data)[InputDim] = (float (*)[InputDim]) ps_malloc(data_size * InputDim * sizeof(float));
+    uint16_t epochs = 100;
+    uint16_t print_interval = 10;
+    float loss;
 
-    if(input_data == nullptr || target_data == nullptr) {
-        Serial.println("Memory allocation failed for training data.");
-        return;
-    }
+    Serial.println(F("Start training"));
 
-    for(uint32_t i = 0; i < data_size; i++){
-        for(int j = 0; j < InputDim; j++){
-            input_data[i][j] = data[i][j];
-            target_data[i][j] = data[i][j]; // 입력 데이터를 그대로 타겟으로 사용
+    for (uint16_t epoch = 0; epoch < epochs; epoch++) {
+        for (uint32_t batch = 0; batch < num_batches; batch++) {
+            // Update tensor data pointers
+            input_tensor.data = &input_data[batch * batch_size * input_size];
+            target_tensor.data = &target_data[batch * batch_size * input_size];
+
+            // Forward pass through encoder
+            aialgo_inference_model(&encoder_model, &input_tensor, &embedding_tensor);
+
+            // Forward and backward pass through decoder
+            aialgo_train_model(&decoder_model, &embedding_tensor, &target_tensor, optimizer, batch_size);
+
+            // Backward pass through encoder
+            aialgo_train_model(&encoder_model, &input_tensor, &embedding_tensor, optimizer, batch_size);
         }
-    }
 
-    aitensor_t input_tensor = AITENSOR_2D_F32(input_shape, input_data);
-    aitensor_t target_tensor = AITENSOR_2D_F32(target_shape, target_data);
+        // Print loss
+        if (epoch % print_interval == 0) {
+            // Compute loss
+            aialgo_inference_model(&encoder_model, &input_tensor, &embedding_tensor);
+            aialgo_inference_model(&decoder_model, &embedding_tensor, &output_tensor);
+            aialgo_calc_loss_model_f32(&decoder_model, &embedding_tensor, &target_tensor, &loss);
 
-    // 배치 사이즈 및 에포크 설정
-    uint32_t batch_size = data_size;
-    uint16_t epochs = 10;
-    uint16_t print_interval = 5;
-
-    for(uint16_t epoch = 0; epoch < epochs; epoch++) {
-        aialgo_train_model(&model, &input_tensor, &target_tensor, optimizer, batch_size);
-
-        if(epoch % print_interval == 0){
-            aialgo_calc_loss_model_f32(&model, &input_tensor, &target_tensor, &loss);
             Serial.print(F("Epoch: "));
             Serial.print(epoch);
             Serial.print(F(" Loss: "));
@@ -148,144 +179,111 @@ void AutoencoderModel::train(float** data, uint32_t data_size) {
         }
     }
 
-    Serial.println("Training completed.");
+    free(embedding_data);
+    free(output_data);
 
-    // 메모리 해제
-    free(input_data);
-    free(target_data);
+    Serial.println(F("Training completed."));
 }
 
-void AutoencoderModel::evaluate(float** data, uint32_t data_size) {
-    if (!initialized) {
-        Serial.println("Model is not initialized.");
-        return;
-    }
+void AutoEncoder::infer(float* input_data, float* output_data, uint32_t total_data_size) {
+    uint16_t input_shape[] = {batch_size, input_size};
+    uint16_t embedding_shape[] = {batch_size, embedding_size};
+    uint16_t output_shape[] = {batch_size, input_size};
 
-    if (data_size < 1) {
-        Serial.println("No data to evaluate.");
-        return;
-    }
+    input_tensor = AITENSOR_2D_F32(input_shape, input_data);
+    embedding_tensor = AITENSOR_2D_F32(embedding_shape, (float*)malloc(batch_size * embedding_size * sizeof(float)));
+    output_tensor = AITENSOR_2D_F32(output_shape, output_data);
 
-    // 평가를 위한 데이터 준비
-    uint16_t eval_input_shape[] = {data_size, InputDim};
+    // Forward pass through encoder
+    aialgo_inference_model(&encoder_model, &input_tensor, &embedding_tensor);
 
-    // PSRAM 사용하여 데이터 배열 할당
-    float (*eval_input_data)[InputDim] = (float (*)[InputDim]) ps_malloc(data_size * InputDim * sizeof(float));
-    float (*eval_output_data)[InputDim] = (float (*)[InputDim]) ps_malloc(data_size * InputDim * sizeof(float));
+    // Forward pass through decoder
+    aialgo_inference_model(&decoder_model, &embedding_tensor, &output_tensor);
 
-    if(eval_input_data == nullptr || eval_output_data == nullptr) {
-        Serial.println("Memory allocation failed for evaluation data.");
-        return;
-    }
-
-    for(uint32_t i = 0; i < data_size; i++){
-        for(int j = 0; j < InputDim; j++){
-            eval_input_data[i][j] = data[i][j];
-        }
-    }
-
-    aitensor_t eval_input_tensor = AITENSOR_2D_F32(eval_input_shape, eval_input_data);
-    aitensor_t eval_output_tensor = AITENSOR_2D_F32(eval_input_shape, eval_output_data);
-
-    aialgo_inference_model(&model, &eval_input_tensor, &eval_output_tensor);
-
-    // 재구성 오차 계산
-    float total_loss = 0.0f;
-    for(uint32_t i = 0; i < data_size; i++){
-        float sample_loss = 0.0f;
-        for(int j = 0; j < InputDim; j++){
-            float error = eval_input_data[i][j] - eval_output_data[i][j];
-            sample_loss += error * error;
-        }
-        sample_loss /= InputDim;
-        total_loss += sample_loss;
-
-        Serial.print("Sample ");
-        Serial.print(i);
-        Serial.print(" Reconstruction Loss: ");
-        Serial.println(sample_loss);
-    }
-
-    float average_loss = total_loss / data_size;
-    Serial.print("Average Reconstruction Loss: ");
-    Serial.println(average_loss);
-
-    // 메모리 해제
-    free(eval_input_data);
-    free(eval_output_data);
+    free(embedding_tensor.data);
 }
 
-void AutoencoderModel::getWeights() {
-    if (!initialized) {
-        Serial.println("Model is not initialized.");
-        return;
+void AutoEncoder::getEmbedding(float* input_data, float* embedding_output, uint32_t total_data_size) {
+    uint16_t input_shape[] = {batch_size, input_size};
+    uint16_t embedding_shape[] = {batch_size, embedding_size};
+
+    input_tensor = AITENSOR_2D_F32(input_shape, input_data);
+    embedding_tensor = AITENSOR_2D_F32(embedding_shape, embedding_output);
+
+    // Perform inference with encoder model to get embedding
+    aialgo_inference_model(&encoder_model, &input_tensor, &embedding_tensor);
+}
+
+void AutoEncoder::getWeights(float* weights[]) {
+    // Encoder layers
+    weights[0] = (float*)encoder_dense_1.weights.data;
+    weights[1] = (float*)encoder_dense_2.weights.data;
+    weights[2] = (float*)encoder_dense_3.weights.data;
+
+    // Decoder layers
+    weights[3] = (float*)decoder_dense_1.weights.data;
+    weights[4] = (float*)decoder_dense_2.weights.data;
+    weights[5] = (float*)decoder_dense_3.weights.data;
+}
+
+void AutoEncoder::getBiases(float* biases[]) {
+    // Encoder layers
+    biases[0] = (float*)encoder_dense_1.bias.data;
+    biases[1] = (float*)encoder_dense_2.bias.data;
+    biases[2] = (float*)encoder_dense_3.bias.data;
+
+    // Decoder layers
+    biases[3] = (float*)decoder_dense_1.bias.data;
+    biases[4] = (float*)decoder_dense_2.bias.data;
+    biases[5] = (float*)decoder_dense_3.bias.data;
+}
+
+void AutoEncoder::setWeights(const float* weights[]) {
+    // Encoder layers
+    memcpy(encoder_dense_1.weights.data, weights[0], sizeof(float) * encoder_dense_1.weights.shape[0] * encoder_dense_1.weights.shape[1]);
+    memcpy(encoder_dense_2.weights.data, weights[1], sizeof(float) * encoder_dense_2.weights.shape[0] * encoder_dense_2.weights.shape[1]);
+    memcpy(encoder_dense_3.weights.data, weights[2], sizeof(float) * encoder_dense_3.weights.shape[0] * encoder_dense_3.weights.shape[1]);
+
+    // Decoder layers
+    memcpy(decoder_dense_1.weights.data, weights[3], sizeof(float) * decoder_dense_1.weights.shape[0] * decoder_dense_1.weights.shape[1]);
+    memcpy(decoder_dense_2.weights.data, weights[4], sizeof(float) * decoder_dense_2.weights.shape[0] * decoder_dense_2.weights.shape[1]);
+    memcpy(decoder_dense_3.weights.data, weights[5], sizeof(float) * decoder_dense_3.weights.shape[0] * decoder_dense_3.weights.shape[1]);
+}
+
+void AutoEncoder::setBiases(const float* biases[]) {
+    // Encoder layers
+    memcpy(encoder_dense_1.bias.data, biases[0], sizeof(float) * encoder_dense_1.bias.shape[0]);
+    memcpy(encoder_dense_2.bias.data, biases[1], sizeof(float) * encoder_dense_2.bias.shape[0]);
+    memcpy(encoder_dense_3.bias.data, biases[2], sizeof(float) * encoder_dense_3.bias.shape[0]);
+
+    // Decoder layers
+    memcpy(decoder_dense_1.bias.data, biases[3], sizeof(float) * decoder_dense_1.bias.shape[0]);
+    memcpy(decoder_dense_2.bias.data, biases[4], sizeof(float) * decoder_dense_2.bias.shape[0]);
+    memcpy(decoder_dense_3.bias.data, biases[5], sizeof(float) * decoder_dense_3.bias.shape[0]);
+}
+
+void AutoEncoder::handleTrainingError(int8_t error) {
+    if (error == 0) return;
+    Serial.print(F("Training Error: "));
+    Serial.println(error);
+}
+
+void AutoEncoder::handleInferenceError(int8_t error) {
+    if (error == 0) return;
+    Serial.print(F("Inference Error: "));
+    Serial.println(error);
+}
+
+void AutoEncoder::print_aitensor(const aitensor_t* tensor) {
+    // Implement tensor data print function
+    float* data = (float*)tensor->data;
+    uint32_t size = 1;
+    for (uint16_t i = 0; i < tensor->dim; i++) {
+        size *= tensor->shape[i];
     }
-
-    Serial.println("Retrieving model weights...");
-
-    // 예상 버퍼 크기 계산 (레이어당 크기: 가중치 + 바이어스)
-    size_t buffer_size = aialgo_sizeof_parameter_memory(&model);
-    byte* buffer = (byte*)ps_malloc(buffer_size); // PSRAM 사용
-    if(buffer == nullptr){
-        Serial.println("Failed to allocate buffer for model parameters.");
-        return;
-    }
-
-    size_t offset = 0;
-    ailayer_t* layer = model.input_layer->next; // 첫 번째 Dense 레이어부터 시작
-
-    while(layer != nullptr) {
-        serializeLayerWeights(layer, buffer, offset);
-        layer = layer->next;
-    }
-
-    // 가중치 데이터를 활용하는 코드 추가 가능
-    // 예를 들어, 시리얼 모니터에 출력하거나 파일에 저장하는 등의 작업을 수행할 수 있습니다.
-
-    // 예시로 가중치 데이터의 일부를 시리얼 모니터에 출력
-    Serial.println("First 100 bytes of model weights:");
-    for(size_t i = 0; i < 100 && i < buffer_size; i++) {
-        Serial.print(buffer[i], HEX);
+    for (uint32_t i = 0; i < size; i++) {
+        Serial.print(data[i]);
         Serial.print(" ");
     }
     Serial.println();
-
-    // 메모리 해제
-    free(buffer);
-}
-
-// 기타 private 함수들 구현
-void AutoencoderModel::allocateMemory() {
-    // 필요한 경우 메모리 할당 관련 로직 추가
-}
-
-void AutoencoderModel::freeMemory() {
-    // 메모리 해제 로직
-    if(parameter_memory != nullptr) {
-        free(parameter_memory);
-        parameter_memory = nullptr;
-    }
-    if(training_memory != nullptr) {
-        free(training_memory);
-        training_memory = nullptr;
-    }
-}
-
-void AutoencoderModel::serializeTensor(aitensor_t* tensor, byte* buffer) {
-    uint16_t* shape = (uint16_t*)tensor->shape;
-    uint16_t dims = tensor->dim;
-    buffer[0] = dims;
-    memcpy(buffer + 1, shape, dims * sizeof(uint16_t));
-    memcpy(buffer + 1 + dims * sizeof(uint16_t), tensor->data, tensor->size * sizeof(float));
-}
-
-void AutoencoderModel::serializeLayerWeights(ailayer_t* layer, byte* buffer, size_t& offset) {
-    // 현재는 Dense 레이어만 처리
-    if (layer->type == AILAYER_DENSE_F32) {
-        ailayer_dense_f32_t* dense = (ailayer_dense_f32_t*)layer;
-        serializeTensor(&dense->weights, buffer + offset);
-        offset += 1 + dense->weights.dim * sizeof(uint16_t) + dense->weights.size * sizeof(float);
-        serializeTensor(&dense->bias, buffer + offset);
-        offset += 1 + dense->bias.dim * sizeof(uint16_t) + dense->bias.size * sizeof(float);
-    }
 }
