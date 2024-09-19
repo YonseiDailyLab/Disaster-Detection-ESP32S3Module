@@ -2,13 +2,19 @@
 #include <Arduino.h>
 
 AutoEncoder::AutoEncoder(uint16_t input_size, uint16_t embedding_size, uint16_t batch_size)
-        : input_size(input_size), embedding_size(embedding_size), batch_size(batch_size) {}
+        : input_size(input_size), embedding_size(embedding_size), batch_size(batch_size),
+        parameter_memory(nullptr), training_memory(nullptr) {}
 
-void AutoEncoder::initialize() {
-    Serial.println(F("AutoEncoder initializing..."));
+AutoEncoder::~AutoEncoder() {
+    free(parameter_memory);
+    free(training_memory);
+}
+
+void AutoEncoder::init() {
+    log_d(F("AutoEncoder initializing..."));
 
     // Initialize random seed
-    srand(analogRead(A0));
+    srand(analogRead(A4));
 
     // --- Encoder Model Initialization ---
     uint16_t encoder_input_shape[] = {1, input_size};
@@ -71,7 +77,7 @@ void AutoEncoder::initialize() {
     Serial.print(total_param_memory_size);
     Serial.println(F(" bytes"));
 
-    parameter_memory = (byte*)malloc(total_param_memory_size);
+    parameter_memory = (byte*)ps_malloc(total_param_memory_size);
     if (!parameter_memory) {
         Serial.println(F("Failed to allocate memory for parameters."));
         while(1);
@@ -110,7 +116,7 @@ void AutoEncoder::initialize() {
     Serial.print(total_training_memory_size);
     Serial.println(F(" bytes"));
 
-    training_memory = (byte*)malloc(total_training_memory_size);
+    training_memory = (byte*)ps_malloc(total_training_memory_size);
     if (!training_memory) {
         Serial.println(F("Failed to allocate memory for training."));
         while(1);
@@ -137,10 +143,10 @@ void AutoEncoder::train(float* input_data, float* target_data, uint32_t total_da
     input_tensor = AITENSOR_2D_F32(input_shape, input_data);
     target_tensor = AITENSOR_2D_F32(output_shape, target_data);
 
-    float* embedding_data = (float*)malloc(batch_size * embedding_size * sizeof(float));
+    float* embedding_data = (float*)ps_malloc(batch_size * embedding_size * sizeof(float));
     embedding_tensor = AITENSOR_2D_F32(embedding_shape, embedding_data);
 
-    float* output_data = (float*)malloc(batch_size * input_size * sizeof(float));
+    float* output_data = (float*)ps_malloc(batch_size * input_size * sizeof(float));
     output_tensor = AITENSOR_2D_F32(output_shape, output_data);
 
     uint16_t epochs = 100;
@@ -191,7 +197,7 @@ void AutoEncoder::infer(float* input_data, float* output_data, uint32_t total_da
     uint16_t output_shape[] = {batch_size, input_size};
 
     input_tensor = AITENSOR_2D_F32(input_shape, input_data);
-    embedding_tensor = AITENSOR_2D_F32(embedding_shape, (float*)malloc(batch_size * embedding_size * sizeof(float)));
+    embedding_tensor = AITENSOR_2D_F32(embedding_shape, (float*)ps_malloc(batch_size * embedding_size * sizeof(float)));
     output_tensor = AITENSOR_2D_F32(output_shape, output_data);
 
     // Forward pass through encoder

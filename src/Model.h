@@ -6,29 +6,14 @@
 class AutoEncoder {
 public:
     AutoEncoder(uint16_t input_size, uint16_t embedding_size, uint16_t batch_size);
-
-    // Initialize the models
-    void initialize();
-
-    // Train the autoencoder
+    ~AutoEncoder();
+    void init();
     void train(float* input_data, float* target_data, uint32_t total_data_size);
-
-    // Perform inference
     void infer(float* input_data, float* output_data, uint32_t total_data_size);
-
-    // Get embedding vector
     void getEmbedding(float* input_data, float* embedding_output, uint32_t total_data_size);
-
-    // Get weights
     void getWeights(float* weights[]);
-
-    // Get biases
     void getBiases(float* biases[]);
-
-    // Set weights
     void setWeights(const float* weights[]);
-
-    // Set biases
     void setBiases(const float* biases[]);
 
 private:
