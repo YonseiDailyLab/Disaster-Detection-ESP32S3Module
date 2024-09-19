@@ -45,6 +45,8 @@ This repository contains only the **ESP32** code that handles sensor data collec
 
 ├── src
 │   ├── main.cpp
+│   ├── Model.h
+│   ├── Model.cpp
 │   ├── dataQueue.h
 │   ├── dataQueue.tpp
 │   ├── utils.h
