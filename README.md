@@ -15,6 +15,7 @@ This repository contains only the **ESP32** code that handles sensor data collec
 - **PlatformIO** (for development)
 - **Arduino Framework**
 - **IDE** (VSCode, CLion, etc.)
+- **Sensor** (PM2008M, AM2320, BMP180, MQ-7)
 ### Installation
 
 1. Clone the repository:
