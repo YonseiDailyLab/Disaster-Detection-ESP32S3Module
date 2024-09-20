@@ -12,6 +12,7 @@
 
 #include "dataQueue.h"
 #include "utils.h"
+#include "Model.h"
 
 // Definitions for MQ-7
 #define placa "ESP32S3FEATHER"
@@ -35,6 +36,7 @@ const char* mqtt_server = "mqtt-dashboard.com";
 WiFiClient espClient;
 PubSubClient client(espClient);
 Adafruit_NeoPixel pixels(NUMPIXELS, LED_PIN, NEO_GRB + NEO_KHZ800);
+AutoEncoder model(SensorCount, 32, 32, 4);
 
 // Sensor objects
 PM2008_I2C pm2008_i2c;
@@ -128,16 +130,32 @@ void callback(char* topic, byte* payload, unsigned int length) {
     Serial.println("Sensor data updated and enqueued.");
 
     // 딥러닝 모델
-    uint32_t i;
-    uint16_t input_shape[] = {(uint16_t)(dataQueue.size()), SensorCount};
-    float input_data[dataQueue.size()][SensorCount];
-    float** data = dataQueue.peekAll();
-    for(i = 0; i < dataQueue.size(); i++){
+    float* data[dataQueue.size()];
+    int data_cnt = dataQueue.peekAll(data);
+    log_i("Data peek all count: %d, Queue size: %d", data_cnt, dataQueue.size());
+
+    // 모델 입력 데이터 생성
+    float* input_data = (float*)ps_malloc(SensorCount * data_cnt * sizeof(float));
+    if (input_data == nullptr) {
+      log_e("Memory allocation failed! Could not allocate input data.");
+      return;
+    }
+    for(int i = 0; i < data_cnt; i++){
       for(int j = 0; j < SensorCount; j++){
-        input_data[i][j] = data[i][j];
+        input_data[i * SensorCount + j] = data[i][j];
       }
     }
+    log_d("Input data created.");
 
+    // 모델 학습
+    model.train(input_data, input_data, data_cnt, 100);
+    log_d("Model trained.");
+
+    // 가중치 및 바이어스, 임베딩 MQTT 전송
+    
+
+    // 메모리 해제
+    free(input_data);
   }
 }
 
@@ -145,6 +163,7 @@ void setup() {
   Serial.begin(115200);
   Wire.begin();
   pixels.begin();
+  model.init();
   int t = 5; // delay time
   int step = 256; // step size for each color transition
 

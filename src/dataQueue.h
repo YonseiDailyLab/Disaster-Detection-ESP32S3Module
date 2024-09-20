@@ -19,14 +19,54 @@ public:
 
     [[noreturn]] ~DataQueue();
 
+    /**
+     * @brief Enqueue data to the queue
+     * @param data
+     */
     void enqueue(T data);
+
+    /**
+     * @brief Dequeue the front data in the queue
+     * @return T data
+     */
     T dequeue();
+
+    /**
+     * @brief Peek the front data in the queue
+     * @return T data
+     */
     T peek();
+
+    /**
+     * @brief Check if the queue is empty
+     * @return true if empty
+     */
     bool isEmpty();
+
+    /**
+     * @brief Check if the queue is full
+     * @return true if full
+     */
     bool isFull();
+
+    /**
+     * @brief Get the size of the queue
+     * @return int size
+     */
     int size();
+
+    /**
+     * @brief Get the Capacity object
+     * @return int capacity
+     */
     int getCapacity();
-    T* peekAll();
+
+    /**
+     * @brief Peek all data in the queue
+     * @param data outparam for data
+     * @return int number of data in the queue
+     */
+    int peekAll(T* data);
 
 private:
     void cleanup(T data);

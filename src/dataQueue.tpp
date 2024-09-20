@@ -3,7 +3,7 @@ DataQueue<T, Size>::DataQueue() : capacity(Size), front(0), rear(-1), count(0) {
 
 template <typename T, std::size_t Size>
 DataQueue<T, Size>::~DataQueue() {
-    while (!isEmpty()) {
+    while (!this->isEmpty()) {
         T data = dequeue();
         cleanup(data);
     }
@@ -11,7 +11,7 @@ DataQueue<T, Size>::~DataQueue() {
 
 template <typename T, std::size_t Size>
 void DataQueue<T, Size>::enqueue(T data) {
-    if (isFull()) {
+    if (this->isFull()) {
         throw std::runtime_error("Queue is full, cannot enqueue.");
     }
     rear = (rear + 1) % capacity;
@@ -21,7 +21,7 @@ void DataQueue<T, Size>::enqueue(T data) {
 
 template <typename T, std::size_t Size>
 T DataQueue<T, Size>::dequeue() {
-    if (isEmpty()) {
+    if (this->isEmpty()) {
         throw std::runtime_error("Queue is empty");
     }
 
@@ -34,7 +34,7 @@ T DataQueue<T, Size>::dequeue() {
 
 template <typename T, std::size_t Size>
 T DataQueue<T, Size>::peek() {
-    if (isEmpty()) {
+    if (this->isEmpty()) {
         throw std::runtime_error("Queue is empty");
     }
 
@@ -69,15 +69,14 @@ void DataQueue<T, Size>::cleanup(T data) {
 }
 
 template <typename T, std::size_t Size>
-T* DataQueue<T, Size>::peekAll() {
-    if (isEmpty()) {
+int DataQueue<T, Size>::peekAll(T* data) {
+    if (this->isEmpty()) {
         throw std::runtime_error("Queue is empty");
     }
     else{
-        T* data = (T*)ps_malloc(count * sizeof(T));
         for (int i = 0; i < count; i++) {
             data[i] = arr[(front + i) % capacity];
         }
-        return data;
+        return count;
         }
 }

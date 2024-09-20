@@ -1,9 +1,12 @@
 #include "Model.h"
 #include <Arduino.h>
 
-AutoEncoder::AutoEncoder(uint16_t input_size, uint16_t embedding_size, uint16_t batch_size)
-        : input_size(input_size), embedding_size(embedding_size), batch_size(batch_size),
-        parameter_memory(nullptr), training_memory(nullptr) {}
+AutoEncoder::AutoEncoder(uint16_t individual_input_size, uint16_t window_size, uint16_t embedding_size, uint16_t batch_size)
+        : individual_input_size(individual_input_size), window_size(window_size), embedding_size(embedding_size),
+          batch_size(batch_size), parameter_memory(nullptr), training_memory(nullptr) {
+    input_size = window_size * individual_input_size;
+    step_size = window_size / 2; // 겹치는 데이터 수 (예: 16)
+}
 
 AutoEncoder::~AutoEncoder() {
     free(parameter_memory);
@@ -11,14 +14,14 @@ AutoEncoder::~AutoEncoder() {
 }
 
 void AutoEncoder::init() {
-    log_d(F("AutoEncoder initializing..."));
+    log_d("AutoEncoder initializing...");
 
     // Initialize random seed
     srand(analogRead(A4));
 
     // --- Encoder Model Initialization ---
     uint16_t encoder_input_shape[] = {1, input_size};
-    encoder_input_layer = AILAYER_INPUT_F32_A(/*input dimension=*/ input_size, /*input shape=*/ encoder_input_shape);
+    encoder_input_layer = AILAYER_INPUT_F32_A(input_size, encoder_input_shape);
     encoder_dense_1 = AILAYER_DENSE_F32_A(/*neurons=*/ 128);
     encoder_tanh_1 = AILAYER_TANH_F32_A();
     encoder_dense_2 = AILAYER_DENSE_F32_A(/*neurons=*/ 64);
@@ -39,7 +42,7 @@ void AutoEncoder::init() {
 
     // --- Decoder Model Initialization ---
     uint16_t decoder_input_shape[] = {1, embedding_size};
-    decoder_input_layer = AILAYER_INPUT_F32_A(/*input dimension=*/ embedding_size, /*input shape=*/ decoder_input_shape);
+    decoder_input_layer = AILAYER_INPUT_F32_A(embedding_size, decoder_input_shape);
     decoder_dense_1 = AILAYER_DENSE_F32_A(/*neurons=*/ 64);
     decoder_tanh_1 = AILAYER_TANH_F32_A();
     decoder_dense_2 = AILAYER_DENSE_F32_A(/*neurons=*/ 128);
@@ -129,51 +132,66 @@ void AutoEncoder::init() {
     log_d("AutoEncoder initialized.");
 }
 
-void AutoEncoder::train(float* input_data, float* target_data, uint32_t total_data_size) {
-    // total_data_size should be a multiple of batch_size
-    uint32_t num_batches = total_data_size / batch_size;
-    uint16_t input_shape[] = {batch_size, input_size};
-    uint16_t embedding_shape[] = {batch_size, embedding_size};
-    uint16_t output_shape[] = {batch_size, input_size};
+void AutoEncoder::train(float* input_data, float* target_data, uint32_t total_data_size, uint16_t epochs){
 
-    input_tensor = AITENSOR_2D_F32(input_shape, input_data);
-    target_tensor = AITENSOR_2D_F32(output_shape, target_data);
+    uint32_t num_windows = (total_data_size - window_size) / step_size + 1;
 
-    float* embedding_data = (float*)ps_malloc(batch_size * embedding_size * sizeof(float));
+    uint16_t input_shape[] = {1, input_size};
+    uint16_t embedding_shape[] = {1, embedding_size};
+    uint16_t output_shape[] = {1, input_size};
+
+    input_tensor = AITENSOR_2D_F32(input_shape, nullptr);
+    target_tensor = AITENSOR_2D_F32(output_shape, nullptr);
+
+    float* embedding_data = (float*)ps_malloc(embedding_size * sizeof(float));
     embedding_tensor = AITENSOR_2D_F32(embedding_shape, embedding_data);
 
-    float* output_data = (float*)ps_malloc(batch_size * input_size * sizeof(float));
+    float* output_data = (float*)ps_malloc(input_size * sizeof(float));
     output_tensor = AITENSOR_2D_F32(output_shape, output_data);
 
-    uint16_t epochs = 100;
     uint16_t print_interval = 10;
     float loss;
 
     log_d("Start training");
 
     for (uint16_t epoch = 0; epoch < epochs; epoch++) {
-        for (uint32_t batch = 0; batch < num_batches; batch++) {
-            // Update tensor data pointers
-            input_tensor.data = &input_data[batch * batch_size * input_size];
-            target_tensor.data = &target_data[batch * batch_size * input_size];
+        for (uint32_t window = 0; window < num_windows; window++) {
 
-            // Forward pass through encoder
+            uint32_t start_idx = window * step_size * individual_input_size;
+
+            if (start_idx + input_size > total_data_size * individual_input_size) {
+                break;
+            }
+            input_tensor.data = &input_data[start_idx];
+            target_tensor.data = &target_data[start_idx];
+
             aialgo_inference_model(&encoder_model, &input_tensor, &embedding_tensor);
-
-            // Forward and backward pass through decoder
-            aialgo_train_model(&decoder_model, &embedding_tensor, &target_tensor, optimizer, batch_size);
-
-            // Backward pass through encoder
-            aialgo_train_model(&encoder_model, &input_tensor, &embedding_tensor, optimizer, batch_size);
+            aialgo_train_model(&decoder_model, &embedding_tensor, &target_tensor, optimizer, 1);
+            aialgo_train_model(&encoder_model, &input_tensor, &embedding_tensor, optimizer, 1);
         }
 
         if (epoch % print_interval == 0) {
-            // Compute loss
-            aialgo_inference_model(&encoder_model, &input_tensor, &embedding_tensor);
-            aialgo_inference_model(&decoder_model, &embedding_tensor, &output_tensor);
-            aialgo_calc_loss_model_f32(&decoder_model, &embedding_tensor, &target_tensor, &loss);
+            float total_loss = 0.0f;
+            for (uint32_t window = 0; window < num_windows; window++) {
+                uint32_t start_idx = window * step_size * individual_input_size;
 
-            log_i("Epoch: %d Loss: %f", epoch, loss);
+                if (start_idx + input_size > total_data_size * individual_input_size) {
+                    break;
+                }
+
+                input_tensor.data = &input_data[start_idx];
+                target_tensor.data = &target_data[start_idx];
+
+                aialgo_inference_model(&encoder_model, &input_tensor, &embedding_tensor);
+                aialgo_inference_model(&decoder_model, &embedding_tensor, &output_tensor);
+
+                aialgo_calc_loss_model_f32(&decoder_model, &embedding_tensor, &target_tensor, &loss);
+
+                total_loss += loss;
+            }
+
+            float average_loss = total_loss / (float)num_windows;
+            log_i("Epoch: %d Loss: %f", epoch, average_loss);
         }
     }
 
@@ -183,7 +201,7 @@ void AutoEncoder::train(float* input_data, float* target_data, uint32_t total_da
     log_d("Training completed.");
 }
 
-void AutoEncoder::infer(float* input_data, float* output_data, uint32_t total_data_size) {
+void AutoEncoder::infer(float* input_data, float* output_data) {
     uint16_t input_shape[] = {batch_size, input_size};
     uint16_t embedding_shape[] = {batch_size, embedding_size};
     uint16_t output_shape[] = {batch_size, input_size};
@@ -201,7 +219,7 @@ void AutoEncoder::infer(float* input_data, float* output_data, uint32_t total_da
     free(embedding_tensor.data);
 }
 
-void AutoEncoder::getEmbedding(float* input_data, float* embedding_output, uint32_t total_data_size) {
+void AutoEncoder::getEmbedding(float* input_data, float* embedding_output) {
     uint16_t input_shape[] = {batch_size, input_size};
     uint16_t embedding_shape[] = {batch_size, embedding_size};
 
@@ -212,7 +230,7 @@ void AutoEncoder::getEmbedding(float* input_data, float* embedding_output, uint3
     aialgo_inference_model(&encoder_model, &input_tensor, &embedding_tensor);
 }
 
-void AutoEncoder::getWeights(float* weights[]) {
+void AutoEncoder::getWeights(float* weights[]) const {
     // Encoder layers
     weights[0] = (float*)encoder_dense_1.weights.data;
     weights[1] = (float*)encoder_dense_2.weights.data;
@@ -224,7 +242,7 @@ void AutoEncoder::getWeights(float* weights[]) {
     weights[5] = (float*)decoder_dense_3.weights.data;
 }
 
-void AutoEncoder::getBiases(float* biases[]) {
+void AutoEncoder::getBiases(float* biases[]) const {
     // Encoder layers
     biases[0] = (float*)encoder_dense_1.bias.data;
     biases[1] = (float*)encoder_dense_2.bias.data;
@@ -236,7 +254,7 @@ void AutoEncoder::getBiases(float* biases[]) {
     biases[5] = (float*)decoder_dense_3.bias.data;
 }
 
-void AutoEncoder::setWeights(const float* weights[]) {
+void AutoEncoder::setWeights(const float* weights[]) const {
     // Encoder layers
     memcpy(encoder_dense_1.weights.data, weights[0], sizeof(float) * encoder_dense_1.weights.shape[0] * encoder_dense_1.weights.shape[1]);
     memcpy(encoder_dense_2.weights.data, weights[1], sizeof(float) * encoder_dense_2.weights.shape[0] * encoder_dense_2.weights.shape[1]);
@@ -248,7 +266,7 @@ void AutoEncoder::setWeights(const float* weights[]) {
     memcpy(decoder_dense_3.weights.data, weights[5], sizeof(float) * decoder_dense_3.weights.shape[0] * decoder_dense_3.weights.shape[1]);
 }
 
-void AutoEncoder::setBiases(const float* biases[]) {
+void AutoEncoder::setBiases(const float* biases[]) const {
     // Encoder layers
     memcpy(encoder_dense_1.bias.data, biases[0], sizeof(float) * encoder_dense_1.bias.shape[0]);
     memcpy(encoder_dense_2.bias.data, biases[1], sizeof(float) * encoder_dense_2.bias.shape[0]);
