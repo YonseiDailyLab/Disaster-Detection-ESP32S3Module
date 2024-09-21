@@ -36,7 +36,7 @@ const char *ssid = "Yonsei-IoT-2G";
 const char *password = "yonseiiot209";
 const char *mqtt_server = "mqtt-dashboard.com";
 
-JsonObject doc;
+JsonDocument doc;
 WiFiClient espClient;
 PubSubClient client(espClient);
 Adafruit_NeoPixel pixels(NUMPIXELS, LED_PIN, NEO_GRB + NEO_KHZ800);
@@ -159,6 +159,20 @@ void callback(char *topic, byte *payload, unsigned int length) {
         log_d("Model trained.");
 
         // 가중치 및 바이어스, 임베딩 MQTT 전송
+
+        aitensor weightsArray[6];
+        aitensor biasesArray[6];
+
+        doc["commend"] = "update";
+        JsonArray weights = doc.to<JsonArray>();
+        model.getWeights(weightsArray);
+        model.getBiases(biasesArray);
+        for(int i = 0; i < 6; i++) {
+            JsonArray weight = weights.createNestedArray();
+            for(int j = 0; j < weightsArray[i].shape(); j++) {
+                weight.add(weightsArray[i][j]);
+            }
+        }
 
 
         // 메모리 해제
