@@ -56,14 +56,14 @@ public:
      *
      * @param weights outparam for weights
      */
-    void getWeights(float* weights[]) const;
+    void getWeights(aitensor weights[]) const;
 
     /**
      * @brief Get the Biases object
      *
      * @param biases outparam for biases
      */
-    void getBiases(float* biases[]) const;
+    void getBiases(aitensor biases[]) const;
 
     /**
      * @brief Set the Weights object
