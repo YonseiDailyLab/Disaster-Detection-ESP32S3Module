@@ -230,28 +230,28 @@ void AutoEncoder::getEmbedding(float* input_data, float* embedding_output) {
     aialgo_inference_model(&encoder_model, &input_tensor, &embedding_tensor);
 }
 
-void AutoEncoder::getWeights(float* weights[]) const {
+void AutoEncoder::getWeights(aitensor weights[]) const {
     // Encoder layers
-    weights[0] = (float*)encoder_dense_1.weights.data;
-    weights[1] = (float*)encoder_dense_2.weights.data;
-    weights[2] = (float*)encoder_dense_3.weights.data;
+    weights[0] = encoder_dense_1.weights;
+    weights[1] = encoder_dense_2.weights;
+    weights[2] = encoder_dense_3.weights;
 
     // Decoder layers
-    weights[3] = (float*)decoder_dense_1.weights.data;
-    weights[4] = (float*)decoder_dense_2.weights.data;
-    weights[5] = (float*)decoder_dense_3.weights.data;
+    weights[3] = decoder_dense_1.weights;
+    weights[4] = decoder_dense_2.weights;
+    weights[5] = decoder_dense_3.weights;
 }
 
-void AutoEncoder::getBiases(float* biases[]) const {
+void AutoEncoder::getBiases(aitensor biases[]) const {
     // Encoder layers
-    biases[0] = (float*)encoder_dense_1.bias.data;
-    biases[1] = (float*)encoder_dense_2.bias.data;
-    biases[2] = (float*)encoder_dense_3.bias.data;
+    biases[0] = encoder_dense_1.bias;
+    biases[1] = encoder_dense_2.bias;
+    biases[2] = encoder_dense_3.bias;
 
     // Decoder layers
-    biases[3] = (float*)decoder_dense_1.bias.data;
-    biases[4] = (float*)decoder_dense_2.bias.data;
-    biases[5] = (float*)decoder_dense_3.bias.data;
+    biases[3] = decoder_dense_1.bias;
+    biases[4] = decoder_dense_2.bias;
+    biases[5] = decoder_dense_3.bias;
 }
 
 void AutoEncoder::setWeights(const float* weights[]) const {

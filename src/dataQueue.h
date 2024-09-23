@@ -17,7 +17,7 @@ private:
 public:
     DataQueue();
 
-    [[noreturn]] ~DataQueue();
+    ~DataQueue();
 
     /**
      * @brief Enqueue data to the queue
