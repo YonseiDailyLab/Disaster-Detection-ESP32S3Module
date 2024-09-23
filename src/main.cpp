@@ -172,9 +172,8 @@ void callback(char *topic, byte *payload, unsigned int length) {
             }
         }
         for(auto& i : biasesArray) {
-            JsonArray bias = doc["biases"].to<JsonArray>();
             for(int j = 0; j < (int)i.shape; j++) {
-                bias.add(((float*)i.data)[j]);
+                biases.add(((float*)i.data)[j]);
             }
         }
         pubMQTT("gsi-aiot/update2server");
