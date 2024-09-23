@@ -161,7 +161,6 @@ void callback(char *topic, byte *payload, unsigned int length) {
         aitensor weightsArray[6];
         aitensor biasesArray[6];
 
-        doc["commend"] = "update";
         JsonArray weights = doc["weights"].to<JsonArray>();
         JsonArray biases = doc["biases"].to<JsonArray>();
         model.getWeights(weightsArray);
@@ -176,6 +175,7 @@ void callback(char *topic, byte *payload, unsigned int length) {
                 biases.add(((float*)i.data)[j]);
             }
         }
+        doc["commend"] = "Server update";
         pubMQTT("gsi-aiot/update2server");
 
         // 메모리 해제
