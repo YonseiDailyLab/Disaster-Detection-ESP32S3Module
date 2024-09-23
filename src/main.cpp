@@ -2,7 +2,6 @@
 #include <Wire.h>
 #include <WiFi.h>
 #include <pm2008_i2c.h>
-#include <Adafruit_Sensor.h>
 #include <Adafruit_AM2320.h>
 #include <Adafruit_BMP085.h>
 #include <MQUnifiedsensor.h>
@@ -27,7 +26,7 @@
 #define NUMPIXELS 1
 
 // Hyperparameters
-#define MAX_DATA_POINTS (1<<10)
+#define MAX_DATA_POINTS (1<<14)
 #define SensorCount 8
 
 #define DEVICE_ID "ESP32S3FEATHER2349080"
@@ -50,7 +49,6 @@ MQUnifiedsensor MQ7(placa, Voltage_Resolution, ADC_Bit_Resolution, pin, type);
 
 // Data queue
 DataQueue<float *, MAX_DATA_POINTS> dataQueue;
-int head = 0;
 
 void setup_wifi() {
     delay(10);
@@ -169,9 +167,8 @@ void callback(char *topic, byte *payload, unsigned int length) {
         model.getWeights(weightsArray);
         model.getBiases(biasesArray);
         for(auto& i : weightsArray) {
-            JsonArray weight = doc["weights"].to<JsonArray>();
             for(int j = 0; j < (int)i.shape; j++) {
-                weight.add(((float*)i.data)[j]);
+                weights.add(((float*)i.data)[j]);
             }
         }
         for(auto& i : biasesArray) {
