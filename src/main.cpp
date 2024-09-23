@@ -164,16 +164,23 @@ void callback(char *topic, byte *payload, unsigned int length) {
         aitensor biasesArray[6];
 
         doc["commend"] = "update";
-        JsonArray weights = doc.to<JsonArray>();
+        JsonArray weights = doc["weights"].to<JsonArray>();
+        JsonArray biases = doc["biases"].to<JsonArray>();
         model.getWeights(weightsArray);
         model.getBiases(biasesArray);
-        for(int i = 0; i < 6; i++) {
-            JsonArray weight = weights.createNestedArray();
-            for(int j = 0; j < weightsArray[i].shape(); j++) {
-                weight.add(weightsArray[i][j]);
+        for(auto& i : weightsArray) {
+            JsonArray weight = doc["weights"].to<JsonArray>();
+            for(int j = 0; j < (int)i.shape; j++) {
+                weight.add(((float*)i.data)[j]);
             }
         }
-
+        for(auto& i : biasesArray) {
+            JsonArray bias = doc["biases"].to<JsonArray>();
+            for(int j = 0; j < (int)i.shape; j++) {
+                bias.add(((float*)i.data)[j]);
+            }
+        }
+        pubMQTT("gsi-aiot/update2server");
 
         // 메모리 해제
         free(input_data);
