@@ -3,19 +3,16 @@
 
 #include <stdexcept>
 #include <Arduino.h>
-#include <type_traits>
+#include <vector>
 
-template <typename T, std::size_t Size>
+template <typename T>
 class DataQueue {
 private:
-    T* arr;
-    int capacity;
-    int front;
-    int rear;
-    int count;
+    std::vector<T> arr;
+    std::size_t capacity;
 
 public:
-    DataQueue();
+    DataQueue(std::size_t capacity);
 
     ~DataQueue();
 
@@ -41,25 +38,25 @@ public:
      * @brief Check if the queue is empty
      * @return true if empty
      */
-    bool isEmpty();
+    bool isEmpty() const;
 
     /**
      * @brief Check if the queue is full
      * @return true if full
      */
-    bool isFull();
+    bool isFull() const;
 
     /**
      * @brief Get the size of the queue
      * @return int size
      */
-    int size();
+    std::size_t size() const;
 
     /**
      * @brief Get the Capacity object
      * @return int capacity
      */
-    int getCapacity();
+    std::size_t getCapacity() const;
 
     /**
      * @brief Peek all data in the queue

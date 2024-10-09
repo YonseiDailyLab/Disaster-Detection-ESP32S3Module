@@ -48,7 +48,7 @@ Adafruit_AM2320 am2320 = Adafruit_AM2320();
 MQUnifiedsensor MQ7(placa, Voltage_Resolution, ADC_Bit_Resolution, pin, type);
 
 // Data queue
-DataQueue<float *, MAX_DATA_POINTS> dataQueue;
+DataQueue<float*> dataQueue = DataQueue<float*>(MAX_DATA_POINTS);
 
 void setup_wifi() {
     delay(10);
@@ -92,7 +92,7 @@ void reconnect() {
 }
 
 void updateDataArray() {
-    auto *sensorData = (float *) ps_malloc(SensorCount * sizeof(float));
+    auto *sensorData = (float *)ps_malloc(SensorCount * sizeof(float));
     if (sensorData == nullptr) {
         Serial.println("Memory allocation failed! Could not allocate sensor data.");
         return;
@@ -107,13 +107,14 @@ void updateDataArray() {
     sensorData[4] = am2320.readHumidity();
     sensorData[5] = am2320.readTemperature();
     sensorData[6] = bmp.readTemperature();
-    sensorData[7] = (float) bmp.readPressure();
+    sensorData[7] = (float)bmp.readPressure();
     Serial.println("Sensor data updated.");
 
     if (dataQueue.isFull()) {
         Serial.println("Data queue is full. Dequeueing the oldest data.");
         free(dataQueue.dequeue());
     }
+    Serial.println("Sensor data enqueuing.");
     dataQueue.enqueue(sensorData);
     Serial.println("Sensor data enqueued.");
     for (int i = 0; i < SensorCount; i++) {
