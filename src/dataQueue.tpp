@@ -1,82 +1,82 @@
-template <typename T, std::size_t Size>
-DataQueue<T, Size>::DataQueue() : capacity(Size), front(0), rear(-1), count(0) {}
+#include "dataQueue.h"
 
-template <typename T, std::size_t Size>
-DataQueue<T, Size>::~DataQueue() {
+template <typename T>
+DataQueue<T>::DataQueue(std::size_t capacity) : capacity(capacity) {
+    arr.reserve(capacity);
+}
+
+template <typename T>
+DataQueue<T>::~DataQueue() {
     while (!this->isEmpty()) {
         T data = dequeue();
         cleanup(data);
     }
 }
 
-template <typename T, std::size_t Size>
-void DataQueue<T, Size>::enqueue(T data) {
+template <typename T>
+void DataQueue<T>::enqueue(T data) {
     if (this->isFull()) {
         throw std::runtime_error("Queue is full, cannot enqueue.");
     }
-    rear = (rear + 1) % capacity;
-    arr[rear] = data;
-    count++;
+    Serial.printf("Enqueueing data: %d \n", data);
+    arr.push_back(data);
 }
 
-template <typename T, std::size_t Size>
-T DataQueue<T, Size>::dequeue() {
+template <typename T>
+T DataQueue<T>::dequeue() {
     if (this->isEmpty()) {
         throw std::runtime_error("Queue is empty");
     }
 
-    T data = arr[front];
-    front = (front + 1) % capacity;
-    count--;
-
+    T data = arr.front();
+    arr.erase(arr.begin());
     return data;
 }
 
-template <typename T, std::size_t Size>
-T DataQueue<T, Size>::peek() {
+template <typename T>
+T DataQueue<T>::peek() {
     if (this->isEmpty()) {
         throw std::runtime_error("Queue is empty");
     }
 
-    return arr[front];
+    return arr.front();
 }
 
-template <typename T, std::size_t Size>
-bool DataQueue<T, Size>::isEmpty() {
-    return (count == 0);
+template <typename T>
+bool DataQueue<T>::isEmpty() const {
+    return arr.empty();
 }
 
-template <typename T, std::size_t Size>
-bool DataQueue<T, Size>::isFull() {
-    return (count == capacity);
+template <typename T>
+bool DataQueue<T>::isFull() const {
+    return arr.size() == capacity;
 }
 
-template <typename T, std::size_t Size>
-int DataQueue<T, Size>::size() {
-    return count;
+template <typename T>
+std::size_t DataQueue<T>::size() const {
+    return arr.size();
 }
 
-template <typename T, std::size_t Size>
-int DataQueue<T, Size>::getCapacity() {
+template <typename T>
+std::size_t DataQueue<T>::getCapacity() const {
     return capacity;
 }
 
-template <typename T, std::size_t Size>
-void DataQueue<T, Size>::cleanup(T data) {
+template <typename T>
+void DataQueue<T>::cleanup(T data) {
     if (std::is_pointer<T>::value) {
         free(data);
     }
 }
 
-template <typename T, std::size_t Size>
-int DataQueue<T, Size>::peekAll(T* data) {
+template <typename T>
+int DataQueue<T>::peekAll(T* data) {
     if (this->isEmpty()) {
         throw std::runtime_error("Queue is empty");
     }
-    else{
-        for (int i = 0; i < count; i++) {
-            data[i] = arr[(front + i) % capacity];
-        }
-        return count;
-        }
+
+    for (std::size_t i = 0; i < arr.size(); ++i) {
+        data[i] = arr[i];
+    }
+    return arr.size();
 }
