@@ -100,6 +100,10 @@ void updateDataArray() {
     Serial.println("Memory allocated for sensor data.");
 
     // 센서 데이터 업데이트
+    uint8_t ret = pm2008_i2c.read();
+    if (ret != 0) {
+        Serial.println("Failed to read PM2008 sensor data.");
+    }
     sensorData[0] = pm2008_i2c.pm1p0_tsi;
     sensorData[1] = pm2008_i2c.pm2p5_tsi;
     sensorData[2] = pm2008_i2c.pm10_tsi;
