@@ -125,13 +125,25 @@ void updateDataArray() {
 }
 
 void pubMQTT(const char *topic) {
-    String massage;
-    serializeJson(doc, massage);
-    client.publish(topic, massage.c_str());
+    String message;
+    serializeJson(doc, message);
+
+    Serial.println("Publishing message:");
+    Serial.println(message);
+
+    if (!client.connected()) {
+        reconnect();
+    }
+
+    if (!client.publish(topic, message.c_str())) {
+        Serial.println("Failed to publish MQTT message.");
+    } else {
+        Serial.println("MQTT message published successfully.");
+    }
 }
 
 void callback(char *topic, byte *payload, unsigned int length) {
-    if (strcmp(topic, "getSensorData") == 0) {
+    if (strcmp(topic, "gsi-aiot/getSensorData") == 0) {
         updateDataArray();
         Serial.println("Sensor data updated and enqueued.");
 
